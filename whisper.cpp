@@ -810,6 +810,7 @@ struct whisper_state {
     whisper_kv_cache kv_cross;
 
     whisper_mel mel;
+    int32_t prev_mel_offset = -1;
 
     whisper_batch batch;
 
@@ -2186,6 +2187,10 @@ static bool whisper_encode_internal(
                    void * abort_callback_data) {
     const int64_t t_start_us = ggml_time_us();
 
+    if (wstate.prev_mel_offset == mel_offset) {
+        return true;
+    }
+
     // conv
     {
         auto & alloc = wstate.alloc_conv.alloc;
@@ -2271,6 +2276,7 @@ static bool whisper_encode_internal(
 
     wstate.t_encode_us += ggml_time_us() - t_start_us;
     wstate.n_encode++;
+    wstate.prev_mel_offset = mel_offset;
 
     return !(abort_callback && abort_callback(abort_callback_data));
 }
@@ -3622,6 +3628,7 @@ int whisper_pcm_to_mel_with_state(struct whisper_context * ctx, struct whisper_s
         WHISPER_LOG_ERROR("%s: failed to compute mel spectrogram\n", __func__);
         return -1;
     }
+    state->prev_mel_offset = -1;
 
     return 0;
 }
@@ -3636,6 +3643,7 @@ int whisper_pcm_to_mel_phase_vocoder_with_state(struct whisper_context * ctx, st
         WHISPER_LOG_ERROR("%s: failed to compute mel spectrogram\n", __func__);
         return -1;
     }
+    state->prev_mel_offset = -1;
 
     return 0;
 }
@@ -3671,6 +3679,7 @@ int whisper_set_mel_with_state(
 
     state->mel.data.resize(n_len*n_mel);
     memcpy(state->mel.data.data(), data, n_len*n_mel*sizeof(float));
+    state->prev_mel_offset = -1;
 
     return 0;
 }
