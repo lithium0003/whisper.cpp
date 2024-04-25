@@ -9,6 +9,13 @@
 
 #include <stdlib.h>
 
+#if defined(__x86_64__)
+#include <immintrin.h>
+#include <f16cintrin.h>
+#elif defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #if __cplusplus
 extern "C" {
 #endif
@@ -53,18 +60,38 @@ void whisper_coreml_encode(
                                float * mel,
                                float * out) {
     MLMultiArray * inMultiArray = [
-        [MLMultiArray alloc] initWithDataPointer: mel
-                                           shape: @[@1, @(n_mel), @(n_ctx)]
-                                        dataType: MLMultiArrayDataTypeFloat32
-                                         strides: @[@(n_ctx*n_mel), @(n_ctx), @1]
-                                     deallocator: nil
-                                           error: nil
+        [MLMultiArray alloc] initWithShape: @[@1, @(n_mel), @(n_ctx)]
+                                  dataType: MLMultiArrayDataTypeFloat16
+                                     error: nil
     ];
 
+#if defined(__x86_64__)
+    for(int i = 0; i < inMultiArray.count; i+=4) {
+        __m128 input = _mm_load_ps(mel + i);
+        __m128i output = _mm_cvtps_ph(input, 0);
+        __m128i *dst16 = (__m128i *)((uint16_t *)inMultiArray.dataPointer + i);
+        _mm_storel_epi64(dst16, output);
+    }
+#elif defined(__aarch64__)
+    for(int i = 0; i < inMultiArray.count; i++) {
+        ((float16_t *)inMultiArray.dataPointer)[i] = mel[i];
+    }
+#endif
     @autoreleasepool {
         whisper_encoder_implOutput * outCoreML = [(__bridge id) ctx->data predictionFromLogmel_data:inMultiArray error:nil];
 
-        memcpy(out, outCoreML.output.dataPointer, outCoreML.output.count * sizeof(float));
+#if defined(__x86_64__)
+        for(int i = 0; i < outCoreML.output.count; i+=4) {
+            const __m128i *src16 = (const __m128i *)((uint16_t *)outCoreML.output.dataPointer + i);
+            __m128i input = _mm_loadl_epi64(src16);
+            __m128 output = _mm_cvtph_ps(input);
+            _mm_storeu_ps(out + i, output);
+        }
+#elif defined(__aarch64__)
+        for(int i = 0; i < outCoreML.output.count; i++) {
+            out[i] = ((float16_t *)outCoreML.output.dataPointer)[i];
+        }
+#endif
     }
 }
 
