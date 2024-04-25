@@ -1493,6 +1493,7 @@ static bool whisper_model_load(struct whisper_model_loader * loader, whisper_con
         model.layers_encoder.resize(n_audio_layer);
         model.layers_decoder.resize(n_text_layer);
 
+#ifndef WHISPER_USE_COREML
         // encoder
         {
             model.e_pe = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, n_audio_state, n_audio_ctx);
@@ -1569,6 +1570,7 @@ static bool whisper_model_load(struct whisper_model_loader * loader, whisper_con
                 model.tensors["encoder.blocks." + std::to_string(i) + ".attn.out.bias"]     = layer.attn_ln_1_b;
             }
         }
+#endif
 
         // decoder
         {
