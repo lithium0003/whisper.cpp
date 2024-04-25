@@ -1,14 +1,12 @@
-// swift-tools-version:5.5
+// swift-tools-version:5.9
 
 import PackageDescription
 
 let package = Package(
     name: "whisper",
     platforms: [
-        .macOS(.v12),
-        .iOS(.v14),
-        .watchOS(.v4),
-        .tvOS(.v14)
+        .macCatalyst(.v17),
+        .iOS(.v17),
     ],
     products: [
         .library(name: "whisper", targets: ["whisper"]),
@@ -16,13 +14,15 @@ let package = Package(
     targets: [
         .target(
             name: "whisper",
+            dependencies: [
+                .target(name: "whisper-coreml"),
+            ],
             path: ".",
             exclude: [
                "bindings",
                "cmake",
                "coreml",
                "examples",
-               "extra",
                "models",
                "samples",
                "tests",
@@ -42,20 +42,52 @@ let package = Package(
             resources: [.process("ggml-metal.metal")],
             publicHeadersPath: "spm-headers",
             cSettings: [
-                .unsafeFlags(["-Wno-shorten-64-to-32", "-O3", "-DNDEBUG"]),
+                .unsafeFlags(["-Wno-shorten-64-to-32", "-O3", "-Ofast", "-DNDEBUG"]),
                 .define("GGML_USE_ACCELERATE"),
                 .unsafeFlags(["-fno-objc-arc"]),
-                .define("GGML_USE_METAL")
-                // NOTE: NEW_LAPACK will required iOS version 16.4+
-                // We should consider add this in the future when we drop support for iOS 14
-                // (ref: ref: https://developer.apple.com/documentation/accelerate/1513264-cblas_sgemm?language=objc)
-                // .define("ACCELERATE_NEW_LAPACK"),
-                // .define("ACCELERATE_LAPACK_ILP64")
+                .define("GGML_USE_METAL"),
+                .define("ACCELERATE_NEW_LAPACK"),
+                .define("ACCELERATE_LAPACK_ILP64"),
+                .define("WHISPER_USE_COREML"),
             ],
             linkerSettings: [
                 .linkedFramework("Accelerate")
             ]
-        )
+        ),
+        .target(
+            name: "whisper-coreml",
+            path: ".",
+            exclude: [
+               "bindings",
+               "cmake",
+               "examples",
+               "models",
+               "samples",
+               "tests",
+               "CMakeLists.txt",
+               "ggml-cuda.cu",
+               "ggml-cuda.h",
+               "Makefile",
+               "ggml-metal.metal",
+            ],
+            sources: [
+                "coreml/whisper-encoder-impl.m",
+                "coreml/whisper-encoder.mm",
+            ],
+            publicHeadersPath: "coreml",
+            cSettings: [
+                .unsafeFlags(["-mf16c"]),
+                .unsafeFlags(["-Wno-shorten-64-to-32", "-O3", "-Ofast", "-DNDEBUG"]),
+                .define("GGML_USE_ACCELERATE"),
+                .unsafeFlags(["-fobjc-arc"]),
+                .define("ACCELERATE_NEW_LAPACK"),
+                .define("ACCELERATE_LAPACK_ILP64"),
+                .define("WHISPER_USE_COREML"),
+            ],
+            linkerSettings: [
+                .linkedFramework("Accelerate")
+            ]
+        ),
     ],
     cxxLanguageStandard: .cxx11
 )
