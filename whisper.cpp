@@ -4566,6 +4566,7 @@ struct whisper_full_params whisper_full_default_params(enum whisper_sampling_str
 
         /*.language          =*/ "en",
         /*.detect_language   =*/ false,
+        /*.language_thold    =*/ 0.0f,
 
         /*.suppress_blank    =*/ true,
         /*.suppress_non_speech_tokens =*/ false,
@@ -5252,6 +5253,11 @@ int whisper_full_with_state(
 
         WHISPER_LOG_INFO("%s: auto-detected language: %s (p = %f)\n", __func__, params.language, probs[whisper_lang_id(params.language)]);
         if (params.detect_language) {
+            return 0;
+        }
+
+        // cancel if language detection is failed.
+        if (probs[whisper_lang_id(params.language)] < params.language_thold) {
             return 0;
         }
     }
