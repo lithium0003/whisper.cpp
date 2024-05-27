@@ -819,6 +819,8 @@ struct whisper_state {
 
     whisper_decoder decoders[WHISPER_MAX_DECODERS];
 
+    ggml_backend_t backend = nullptr;
+
     // ggml-alloc:
     // - stores meta info about the intermediate tensors into the `meta` buffers
     // - stores the actual tensor data into the `data` buffers
@@ -2268,7 +2270,7 @@ static bool whisper_encode_internal(
         }
 
         if (!whisper_encode_external(wstate)) {
-            if (!ggml_graph_compute_helper(wctx.backend, gf, n_threads)) {
+            if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
                 return false;
             }
         } else {
@@ -2291,7 +2293,7 @@ static bool whisper_encode_internal(
             return false;
         }
 
-        if (!ggml_graph_compute_helper(wctx.backend, gf, n_threads)) {
+        if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
             return false;
         }
     }
@@ -2307,7 +2309,7 @@ static bool whisper_encode_internal(
             return false;
         }
 
-        if (!ggml_graph_compute_helper(wctx.backend, gf, n_threads)) {
+        if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
             return false;
         }
     }
@@ -2809,7 +2811,7 @@ static bool whisper_decode_internal(
 
         logits = gf->nodes[gf->n_nodes - 1];
 
-        if (!ggml_graph_compute_helper(wctx.backend, gf, n_threads)) {
+        if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
             return false;
         }
     }
@@ -3256,6 +3258,13 @@ struct whisper_state * whisper_init_state(whisper_context * ctx) {
 
     whisper_state * state = new whisper_state;
 
+    state->backend = whisper_backend_init(ctx->params);
+    if (!state->backend) {
+        WHISPER_LOG_ERROR("%s: whisper_backend_init() failed\n", __func__);
+        whisper_free_state(state);
+        return nullptr;
+    }
+
     // at this point, we don't know yet how many decoders will be used, so we overallocate 3x ctx
     // in theory, there can be a case where this is not enough, but in practice it should always be enough
     const int factor = 3;
@@ -3691,6 +3700,8 @@ void whisper_free_state(struct whisper_state * state) {
         ggml_gallocr_free(state->alloc_encode.alloc);
         ggml_gallocr_free(state->alloc_cross.alloc);
         ggml_gallocr_free(state->alloc_decode.alloc);
+
+        ggml_backend_free(state->backend);
 
         // [EXPERIMENTAL] Token-level timestamps with DTW
         aheads_masks_free(state->aheads_masks);
