@@ -34,6 +34,7 @@ struct server_params
     std::string hostname = "127.0.0.1";
     std::string public_path = "examples/server/public";
     std::string request_path = "";
+    std::string inference_path = "/inference";
 
     int32_t port          = 8080;
     int32_t read_timeout  = 600;
@@ -61,7 +62,6 @@ struct whisper_params {
     float temperature     =  0.00f;
     float temperature_inc =  0.20f;
 
-    bool speed_up        = false;
     bool debug_mode      = false;
     bool translate       = false;
     bool detect_language = false;
@@ -112,7 +112,6 @@ void whisper_print_usage(int /*argc*/, char ** argv, const whisper_params & para
     fprintf(stderr, "  -wt N,     --word-thold N      [%-7.2f] word timestamp probability threshold\n",         params.word_thold);
     fprintf(stderr, "  -et N,     --entropy-thold N   [%-7.2f] entropy threshold for decoder fail\n",           params.entropy_thold);
     fprintf(stderr, "  -lpt N,    --logprob-thold N   [%-7.2f] log probability threshold for decoder fail\n",   params.logprob_thold);
-    // fprintf(stderr, "  -su,       --speed-up          [%-7s] speed up audio by x2 (reduced accuracy)\n",        params.speed_up ? "true" : "false");
     fprintf(stderr, "  -debug,    --debug-mode        [%-7s] enable debug mode (eg. dump log_mel)\n",           params.debug_mode ? "true" : "false");
     fprintf(stderr, "  -tr,       --translate         [%-7s] translate from source language to english\n",      params.translate ? "true" : "false");
     fprintf(stderr, "  -di,       --diarize           [%-7s] stereo audio diarization\n",                       params.diarize ? "true" : "false");
@@ -134,6 +133,7 @@ void whisper_print_usage(int /*argc*/, char ** argv, const whisper_params & para
     fprintf(stderr, "  --port PORT,                   [%-7d] Port number for the server\n", sparams.port);
     fprintf(stderr, "  --public PATH,                 [%-7s] Path to the public folder\n", sparams.public_path.c_str());
     fprintf(stderr, "  --request-path PATH,           [%-7s] Request path for all requests\n", sparams.request_path.c_str());
+    fprintf(stderr, "  --inference-path PATH,         [%-7s] Inference path for all requests\n", sparams.inference_path.c_str());
     fprintf(stderr, "  --convert,                     [%-7s] Convert audio to WAV, requires ffmpeg on the server", sparams.ffmpeg_converter ? "true" : "false");
     fprintf(stderr, "\n");
 }
@@ -159,7 +159,6 @@ bool whisper_params_parse(int argc, char ** argv, whisper_params & params, serve
         else if (arg == "-wt"   || arg == "--word-thold")      { params.word_thold      = std::stof(argv[++i]); }
         else if (arg == "-et"   || arg == "--entropy-thold")   { params.entropy_thold   = std::stof(argv[++i]); }
         else if (arg == "-lpt"  || arg == "--logprob-thold")   { params.logprob_thold   = std::stof(argv[++i]); }
-        // else if (arg == "-su"   || arg == "--speed-up")        { params.speed_up        = true; }
         else if (arg == "-debug"|| arg == "--debug-mode")      { params.debug_mode      = true; }
         else if (arg == "-tr"   || arg == "--translate")       { params.translate       = true; }
         else if (arg == "-di"   || arg == "--diarize")         { params.diarize         = true; }
@@ -185,6 +184,7 @@ bool whisper_params_parse(int argc, char ** argv, whisper_params & params, serve
         else if (                  arg == "--host")            { sparams.hostname    = argv[++i]; }
         else if (                  arg == "--public")          { sparams.public_path = argv[++i]; }
         else if (                  arg == "--request-path")    { sparams.request_path = argv[++i]; }
+        else if (                  arg == "--inference-path")  { sparams.inference_path = argv[++i]; }
         else if (                  arg == "--convert")         { sparams.ffmpeg_converter     = true; }
         else {
             fprintf(stderr, "error: unknown argument: %s\n", arg.c_str());
@@ -647,10 +647,10 @@ int main(int argc, char ** argv) {
         return false;
     });
 
-    svr.Options(sparams.request_path + "/inference", [&](const Request &, Response &){
+    svr.Options(sparams.request_path + sparams.inference_path, [&](const Request &, Response &){
     });
 
-    svr.Post(sparams.request_path + "/inference", [&](const Request &req, Response &res){
+    svr.Post(sparams.request_path + sparams.inference_path, [&](const Request &req, Response &res){
         // acquire whisper model mutex lock
         std::lock_guard<std::mutex> lock(whisper_mutex);
 
@@ -677,7 +677,8 @@ int main(int argc, char ** argv) {
         if (sparams.ffmpeg_converter) {
             // if file is not wav, convert to wav
             // write to temporary file
-            const std::string temp_filename = "whisper_server_temp_file.wav";
+            const std::string temp_filename_base = std::tmpnam(nullptr);
+            const std::string temp_filename = temp_filename_base + ".wav";
             std::ofstream temp_file{temp_filename, std::ios::binary};
             temp_file << audio_file.content;
             temp_file.close();
@@ -768,7 +769,6 @@ int main(int argc, char ** argv) {
             wparams.split_on_word    = params.split_on_word;
             wparams.audio_ctx        = params.audio_ctx;
 
-            wparams.speed_up         = params.speed_up;
             wparams.debug_mode       = params.debug_mode;
 
             wparams.tdrz_enable      = params.tinydiarize; // [TDRZ]

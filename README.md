@@ -4,6 +4,7 @@
 
 [![Actions Status](https://github.com/ggerganov/whisper.cpp/workflows/CI/badge.svg)](https://github.com/ggerganov/whisper.cpp/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Conan Center](https://shields.io/conan/v/whisper-cpp)](https://conan.io/center/whisper-cpp)
 [![npm](https://img.shields.io/npm/v/whisper.cpp.svg)](https://www.npmjs.com/package/whisper.cpp/)
 
 Stable: [v1.6.2](https://github.com/ggerganov/whisper.cpp/releases/tag/v1.6.0) / [Roadmap | F.A.Q.](https://github.com/ggerganov/whisper.cpp/discussions/126)
@@ -19,9 +20,9 @@ High-performance inference of [OpenAI's Whisper](https://github.com/openai/whisp
 - Zero memory allocations at runtime
 - Support for CPU-only inference
 - [Efficient GPU support for NVIDIA](https://github.com/ggerganov/whisper.cpp#nvidia-gpu-support-via-cublas)
-- [Partial OpenCL GPU support via CLBlast](https://github.com/ggerganov/whisper.cpp#opencl-gpu-support-via-clblast)
 - [OpenVINO Support](https://github.com/ggerganov/whisper.cpp#openvino-support)
-- [C-style API](https://github.com/ggerganov/whisper.cpp/blob/master/whisper.h)
+- [Ascend NPU Support](https://github.com/ggerganov/whisper.cpp#ascend-npu-support)
+- [C-style API](https://github.com/ggerganov/whisper.cpp/blob/master/include/whisper.h)
 
 Supported platforms:
 
@@ -33,9 +34,9 @@ Supported platforms:
 - [x] [WebAssembly](examples/whisper.wasm)
 - [x] Windows ([MSVC](https://github.com/ggerganov/whisper.cpp/blob/master/.github/workflows/build.yml#L117-L144) and [MinGW](https://github.com/ggerganov/whisper.cpp/issues/168)]
 - [x] [Raspberry Pi](https://github.com/ggerganov/whisper.cpp/discussions/166)
-- [x] [docker](https://github.com/ggerganov/whisper.cpp/pkgs/container/whisper.cpp)
+- [x] [Docker](https://github.com/ggerganov/whisper.cpp/pkgs/container/whisper.cpp)
 
-The entire high-level implementation of the model is contained in [whisper.h](whisper.h) and [whisper.cpp](whisper.cpp).
+The entire high-level implementation of the model is contained in [whisper.h](include/whisper.h) and [whisper.cpp](src/whisper.cpp).
 The rest of the code is part of the [`ggml`](https://github.com/ggerganov/ggml) machine learning library.
 
 Having such a lightweight implementation of the model allows to easily integrate it in different platforms and applications.
@@ -55,8 +56,8 @@ Or you can even run it straight in the browser: [talk.wasm](examples/talk.wasm)
 
 ## Implementation details
 
-- The core tensor operations are implemented in C ([ggml.h](ggml.h) / [ggml.c](ggml.c))
-- The transformer model and the high-level C-style API are implemented in C++ ([whisper.h](whisper.h) / [whisper.cpp](whisper.cpp))
+- The core tensor operations are implemented in C ([ggml.h](ggml/include/ggml.h) / [ggml.c](ggml/src/ggml.c))
+- The transformer model and the high-level C-style API are implemented in C++ ([whisper.h](include/whisper.h) / [whisper.cpp](src/whisper.cpp))
 - Sample usage is demonstrated in [main.cpp](examples/main)
 - Sample real-time audio transcription from the microphone is demonstrated in [stream.cpp](examples/stream)
 - Various other examples are available in the [examples](examples) folder
@@ -418,30 +419,8 @@ Now build `whisper.cpp` with CUDA support:
 
 ```
 make clean
-WHISPER_CUDA=1 make -j
+GGML_CUDA=1 make -j
 ```
-
-## OpenCL GPU support via CLBlast
-
-For cards and integrated GPUs that support OpenCL, the Encoder processing can be largely offloaded to the GPU through CLBlast. This is especially useful for users with AMD APUs or low end devices for up to ~2x speedup.
-
-First, make sure you have installed `CLBlast` for your OS or Distribution: https://github.com/CNugteren/CLBlast
-
-Now build `whisper.cpp` with CLBlast support:
-
-```
-Makefile:
-cd whisper.cpp
-make clean
-WHISPER_CLBLAST=1 make -j
-
-CMake:
-cd whisper.cpp
-cmake -B build -DWHISPER_CLBLAST=ON
-cmake --build build -j --config Release
-```
-
-Run all the examples as usual.
 
 ## BLAS CPU support via OpenBLAS
 
@@ -452,7 +431,7 @@ Now build `whisper.cpp` with OpenBLAS support:
 
 ```
 make clean
-WHISPER_OPENBLAS=1 make -j
+GGML_OPENBLAS=1 make -j
 ```
 
 ## BLAS CPU support via Intel MKL
@@ -469,6 +448,39 @@ cd build
 cmake -DWHISPER_MKL=ON ..
 WHISPER_MKL=1 make -j
 ```
+
+## Ascend NPU support
+
+Ascend NPU provides inference acceleration via [`CANN`](https://www.hiascend.com/en/software/cann) and AI cores. 
+
+First, check if your Ascend NPU device is supported:
+
+**Verified devices**
+| Ascend NPU                    | Status  |
+|:-----------------------------:|:-------:|
+| Atlas 300T A2                 | Support |
+
+Then, make sure you have installed [`CANN toolkit`](https://www.hiascend.com/en/software/cann/community) . The lasted version of CANN is recommanded.
+
+Now build `whisper.cpp` with CANN support:
+
+```
+mkdir build
+cd build
+cmake .. -D GGML_CANN=on
+make -j
+```
+
+Run the inference examples as usual, for example:
+
+```
+./build/bin/main -f samples/jfk.wav -m models/ggml-base.en.bin -t 8
+```
+
+*Notes:*
+
+- If you have trouble with Ascend NPU device, please create a issue with **[CANN]** prefix/tag.
+- If you run successfully with your Ascend NPU device, please help update the table `Verified devices`.
 
 ## Docker
 
@@ -501,6 +513,16 @@ docker run -it --rm \
   -v path/to/models:/models \
   whisper.cpp:main "./main -m /models/ggml-base.bin -f ./samples/jfk.wav"
 ```
+
+## Installing with Conan
+
+You can install pre-built binaries for whisper.cpp or build it from source using [Conan](https://conan.io/). Use the following command:
+
+```
+conan install --requires="whisper-cpp/[*]" --build=missing
+```
+
+For detailed instructions on how to use Conan, please refer to the [Conan documentation](https://docs.conan.io/2/).
 
 ## Limitations
 
@@ -710,7 +732,7 @@ The [main](examples/main) example provides support for output of karaoke-style m
 currently pronounced word is highlighted. Use the `-wts` argument and run the generated bash script.
 This requires to have `ffmpeg` installed.
 
-Here are a few *"typical"* examples:
+Here are a few _"typical"_ examples:
 
 ```bash
 ./main -m ./models/ggml-base.en.bin -f ./samples/jfk.wav -owts
@@ -763,7 +785,7 @@ took to execute it. The results are summarized in the following Github issue:
 
 [Benchmark results](https://github.com/ggerganov/whisper.cpp/issues/89)
 
-Additionally a script to run whisper.cpp with different models and audio files is provided [bench.py](bench.py).
+Additionally a script to run whisper.cpp with different models and audio files is provided [bench.py](scripts/bench.py).
 
 You can run it with the following command, by default it will run against any standard model in the models folder.
 
@@ -810,6 +832,7 @@ For more details, see the conversion script [models/convert-pt-to-ggml.py](model
   - [stlukey/whispercpp.py](https://github.com/stlukey/whispercpp.py) (Cython)
   - [AIWintermuteAI/whispercpp](https://github.com/AIWintermuteAI/whispercpp) (Updated fork of aarnphm/whispercpp)
   - [aarnphm/whispercpp](https://github.com/aarnphm/whispercpp) (Pybind11)
+  - [abdeladim-s/pywhispercpp](https://github.com/abdeladim-s/pywhispercpp) (Pybind11)
 - [x] R: [bnosac/audio.whisper](https://github.com/bnosac/audio.whisper)
 - [x] Unity: [macoron/whisper.unity](https://github.com/Macoron/whisper.unity)
 

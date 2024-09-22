@@ -76,11 +76,6 @@ func (context *context) SetTranslate(v bool) {
 	context.params.SetTranslate(v)
 }
 
-// Set speedup flag
-func (context *context) SetSpeedup(v bool) {
-	context.params.SetSpeedup(v)
-}
-
 func (context *context) SetSplitOnWord(v bool) {
 	context.params.SetSplitOnWord(v)
 }
@@ -128,6 +123,32 @@ func (context *context) SetMaxTokensPerSegment(n uint) {
 // Set audio encoder context
 func (context *context) SetAudioCtx(n uint) {
 	context.params.SetAudioCtx(int(n))
+}
+
+// Set maximum number of text context tokens to store
+func (context *context) SetMaxContext(n int) {
+	context.params.SetMaxContext(n)
+}
+
+// Set Beam Size
+func (context *context) SetBeamSize(n int) {
+	context.params.SetBeamSize(n)
+}
+
+// Set Entropy threshold
+func (context *context) SetEntropyThold(t float32) {
+	context.params.SetEntropyThold(t)
+}
+
+// Set Temperature
+func (context *context) SetTemperature(t float32) {
+	context.params.SetTemperature(t)
+}
+
+// Set the fallback temperature incrementation
+// Pass -1.0 to disable this feature
+func (context *context) SetTemperatureFallback(t float32) {
+	context.params.SetTemperatureFallback(t)
 }
 
 // Set initial prompt
