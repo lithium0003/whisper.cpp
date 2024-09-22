@@ -21,7 +21,6 @@ let package = Package(
             exclude: [
                "bindings",
                "cmake",
-               "coreml",
                "examples",
                "models",
                "samples",
@@ -70,8 +69,8 @@ let package = Package(
                "ggml-metal.metal",
             ],
             sources: [
-                "coreml/whisper-encoder-impl.m",
-                "coreml/whisper-encoder.mm",
+                "src/coreml/whisper-encoder-impl.m",
+                "src/coreml/whisper-encoder.mm",
             ],
             publicHeadersPath: "coreml",
             cSettings: [
