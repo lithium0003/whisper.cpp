@@ -835,6 +835,7 @@ struct whisper_state {
     whisper_mel mel;
     whisper_mel_calc * mel_calc = nullptr;
     whisper_mel_calc * mel_calc_fallback = nullptr;
+    int32_t prev_mel_offset = -1;
 
     whisper_batch batch;
 
@@ -4098,6 +4099,9 @@ int whisper_lang_auto_detect_with_state(
     auto & logits_id = state->decoders[0].logits_id;
     logits_id.clear();
 
+    // add no speech token
+    logits_id.emplace_back(state->logits[whisper_token_nosp(ctx)], -1);
+    
     for (const auto & kv : g_lang) {
         const auto token_lang = whisper_token_lang(ctx, kv.second.first);
         logits_id.emplace_back(state->logits[token_lang], kv.second.first);
@@ -4129,14 +4133,14 @@ int whisper_lang_auto_detect_with_state(
     {
         for (const auto & prob : logits_id) {
             if (lang_probs) {
-                lang_probs[prob.second] = prob.first;
+                lang_probs[prob.second+1] = prob.first;
             }
 
             //printf("%s: lang %2d (%3s): %f\n", __func__, prob.second, whisper_lang_str(prob.second), prob.first);
         }
     }
 
-    return logits_id[0].second;
+    return (logits_id[0].second < 0) ? logits_id[1].second : logits_id[0].second;
 }
 
 int whisper_lang_auto_detect(
@@ -5511,26 +5515,32 @@ int whisper_full_with_state(
         }
     }
 
-    // auto-detect language if not specified
-    if (params.language == nullptr || strlen(params.language) == 0 || strcmp(params.language, "auto") == 0 || params.detect_language) {
-        std::vector<float> probs(whisper_lang_max_id() + 1, 0.0f);
-
+    {
+        std::vector<float> probs(whisper_lang_max_id() + 2, 0.0f);
         const auto lang_id = whisper_lang_auto_detect_with_state(ctx, state, 0, params.n_threads, probs.data());
-        if (lang_id < 0) {
-            WHISPER_LOG_ERROR("%s: failed to auto-detect language\n", __func__);
-            return -3;
-        }
-        state->lang_id = lang_id;
-        params.language = whisper_lang_str(lang_id);
-
-        WHISPER_LOG_INFO("%s: auto-detected language: %s (p = %f)\n", __func__, params.language, probs[whisper_lang_id(params.language)]);
-        if (params.detect_language) {
+        WHISPER_LOG_INFO("%s: no_speech prob = %f\n", __func__, probs[0]);
+        if (probs[0] > params.no_speech_thold) {
+            state->lang_id = -1;
+            WHISPER_LOG_INFO("%s: no_speech\n", __func__);
             return 0;
         }
 
-        // cancel if language detection is failed.
-        if (probs[whisper_lang_id(params.language)] < params.language_thold) {
-            return 0;
+        // auto-detect language if not specified
+        if (params.language == nullptr || strlen(params.language) == 0 || strcmp(params.language, "auto") == 0 || params.detect_language) {
+
+            state->lang_id = lang_id;
+            params.language = whisper_lang_str(lang_id);
+
+            WHISPER_LOG_INFO("%s: auto-detected language: %s (p = %f)\n", __func__, params.language, probs[whisper_lang_id(params.language)+1]);
+            if (params.detect_language) {
+                return 0;
+            }
+
+            // cancel if language detection is failed.
+            if (probs[whisper_lang_id(params.language)+1] < params.language_thold) {
+                state->lang_id = -1;
+                return 0;
+            }
         }
     }
 
@@ -6257,7 +6267,7 @@ int whisper_full_with_state(
                         speaker_turn_next = true;
                     }
 
-                    if (tokens_cur[i].id > whisper_token_beg(ctx) && !params.single_segment) {
+                    if (tokens_cur[i].id > whisper_token_beg(ctx)) {
                         const auto t1 = seek + 2*(tokens_cur[i].tid - whisper_token_beg(ctx));
 
                         if (!text.empty()) {
@@ -6353,6 +6363,9 @@ int whisper_full_with_state(
             }
 
             // update audio window
+            if(params.single_segment) {
+                break;
+            }
             seek += seek_delta;
 
             WHISPER_LOG_DEBUG("seek = %d, seek_delta = %d\n", seek, seek_delta);
@@ -7111,7 +7124,7 @@ static void whisper_exp_compute_token_level_timestamps(
                         k++;
                     }
                     tokens[j].t1 = sample_to_timestamp(k);
-                    if (j < ns - 1 && tokens[j].t1 > tokens[j + 1].t0) {
+                    if (j < ns - 1 && j < n - 2 && tokens[j].t1 > tokens[j + 1].t0) {
                         tokens[j].t1 = tokens[j + 1].t0;
                     } else {
                         s1 = k;
