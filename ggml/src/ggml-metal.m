@@ -2977,69 +2977,6 @@ static enum ggml_status ggml_metal_graph_compute(
 
         ctx->n_nodes_per_cb = (ctx->n_nodes_1 + ctx->n_cb - 1) / ctx->n_cb;
 
-        const bool should_capture = ctx->capture_next_compute;
-        if (should_capture) {
-            ctx->capture_next_compute = false;
-
-            if (!ctx->capture_started) {
-                // create capture scope
-                ctx->capture_scope = [[MTLCaptureManager sharedCaptureManager] newCaptureScopeWithDevice:ctx->device];
-
-                MTLCaptureDescriptor * descriptor = [MTLCaptureDescriptor new];
-                descriptor.captureObject = ctx->capture_scope;
-                descriptor.destination = MTLCaptureDestinationGPUTraceDocument;
-                descriptor.outputURL = [NSURL fileURLWithPath:[NSString stringWithFormat:@"/tmp/perf-metal.gputrace"]];
-
-                NSError * error = nil;
-                if (![[MTLCaptureManager sharedCaptureManager] startCaptureWithDescriptor:descriptor error:&error]) {
-                    GGML_LOG_ERROR("%s: error: unable to start capture '%s'\n", __func__, [[error localizedDescription] UTF8String]);
-                } else {
-                    [ctx->capture_scope beginScope];
-                    ctx->capture_started = true;
-                }
-            }
-        }
-
-        // TODO: how to avoid this allocation? I tried initializing it in ggml_backend_metal_set_n_cb but it crashes.
-        ctx->encode_async = ^(size_t iter) {
-            const int cb_idx = iter;
-            const int n_cb_l = ctx->n_cb;
-
-            const int n_nodes_0 = ctx->n_nodes_0;
-            const int n_nodes_1 = ctx->n_nodes_1;
-
-            const int n_nodes_per_cb = ctx->n_nodes_per_cb;
-
-            id<MTLCommandBuffer> command_buffer  = ctx->command_buffers[cb_idx];
-            id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
-
-            int node_start = 0;
-            int node_end   = n_nodes_0;
-
-            if (cb_idx < n_cb_l) {
-                node_start = n_nodes_0 + (                                         (cb_idx + 0) * n_nodes_per_cb);
-                node_end   = n_nodes_0 + (MIN((cb_idx == n_cb_l - 1) ? n_nodes_1 : (cb_idx + 1) * n_nodes_per_cb, n_nodes_1));
-            }
-
-            for (int idx = node_start; idx < node_end; ++idx) {
-                if (should_capture) {
-                    [encoder pushDebugGroup:[NSString stringWithCString:ggml_op_desc(ggml_graph_node(gf, idx)) encoding:NSUTF8StringEncoding]];
-                }
-
-                ggml_metal_encode_node(ctx, idx, encoder);
-
-                if (should_capture) {
-                    [encoder popDebugGroup];
-                }
-            }
-
-            [encoder endEncoding];
-
-            if (cb_idx < 2 || ctx->abort_callback == NULL) {
-                [command_buffer commit];
-            }
-        };
-
         // the main thread commits the first few commands immediately
         // command_buffer[n_cb]
         {
@@ -3112,11 +3049,6 @@ static enum ggml_status ggml_metal_graph_compute(
             }
 
             [next_buffer commit];
-        }
-
-        if (!should_capture && ctx->capture_started) {
-            [ctx->capture_scope endScope];
-            [[MTLCaptureManager sharedCaptureManager] stopCapture];
         }
     }
 
@@ -3468,10 +3400,36 @@ static void ggml_backend_metal_set_n_cb(ggml_backend_t backend, int n_cb) {
         }
     }
 
-    // TODO: setting encode_async here causes crash during the next ggml_metal_graph_compute call. why?
-    //ctx->encode_async = ^(size_t iter) {
-    //    ...
-    //};
+    ctx->encode_async = [^(size_t iter) {
+        const int cb_idx = iter;
+        const int n_cb_l = ctx->n_cb;
+
+        const int n_nodes_0 = ctx->n_nodes_0;
+        const int n_nodes_1 = ctx->n_nodes_1;
+
+        const int n_nodes_per_cb = ctx->n_nodes_per_cb;
+
+        id<MTLCommandBuffer> command_buffer  = ctx->command_buffers[cb_idx];
+        id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
+
+        int node_start = 0;
+        int node_end   = n_nodes_0;
+
+        if (cb_idx < n_cb_l) {
+            node_start = n_nodes_0 + (                                         (cb_idx + 0) * n_nodes_per_cb);
+            node_end   = n_nodes_0 + (MIN((cb_idx == n_cb_l - 1) ? n_nodes_1 : (cb_idx + 1) * n_nodes_per_cb, n_nodes_1));
+        }
+
+        for (int idx = node_start; idx < node_end; ++idx) {
+            ggml_metal_encode_node(ctx, idx, encoder);
+        }
+
+        [encoder endEncoding];
+
+        if (cb_idx < 2 || ctx->abort_callback == NULL) {
+            [command_buffer commit];
+        }
+    } copy];
 }
 
 static struct ggml_backend_i ggml_backend_metal_i = {

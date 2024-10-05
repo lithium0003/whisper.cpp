@@ -844,6 +844,7 @@ struct whisper_state {
     whisper_kv_cache kv_pad;
 
     whisper_mel mel;
+    int prev_encode_offset = -1;
 
     whisper_batch batch;
 
@@ -2318,6 +2319,10 @@ static bool whisper_encode_internal(
                    void * abort_callback_data) {
     const int64_t t_start_us = ggml_time_us();
 
+    if (wstate.prev_encode_offset == mel_offset) {
+        return true;
+    }
+
     // conv
     {
         auto & sched = wstate.sched_conv.sched;
@@ -2403,6 +2408,7 @@ static bool whisper_encode_internal(
 
     wstate.t_encode_us += ggml_time_us() - t_start_us;
     wstate.n_encode++;
+    wstate.prev_encode_offset = mel_offset;
 
     return !(abort_callback && abort_callback(abort_callback_data));
 }
@@ -3968,6 +3974,7 @@ int whisper_lang_auto_detect_with_state(
     }
 
     // run the encoder
+    state->prev_encode_offset = -1;
     if (whisper_encode_with_state(ctx, state, seek, n_threads) != 0) {
         WHISPER_LOG_ERROR("%s: failed to encode\n", __func__);
         return -6;
