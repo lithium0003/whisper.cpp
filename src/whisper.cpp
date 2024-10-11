@@ -5409,6 +5409,10 @@ int whisper_full_with_state(
     {
         std::vector<float> probs(whisper_lang_max_id() + 2, 0.0f);
         const auto lang_id = whisper_lang_auto_detect_with_state(ctx, state, 0, params.n_threads, probs.data());
+        if (lang_id < 0) {
+            WHISPER_LOG_ERROR("%s: failed to auto-detect language\n", __func__);
+            return -3;
+        }
         WHISPER_LOG_INFO("%s: no_speech prob = %f\n", __func__, probs[0]);
         if (probs[0] > params.no_speech_thold) {
             state->lang_id = -1;
