@@ -293,7 +293,7 @@ This can result in significant speedup in encoder performance. Here are the inst
   The first time run on an OpenVINO device is slow, since the OpenVINO framework will compile the IR (Intermediate Representation) model to a device-specific 'blob'. This device-specific blob will get
   cached for the next run.
 
-For more information about the Core ML implementation please refer to PR [#1037](https://github.com/ggerganov/whisper.cpp/pull/1037).
+For more information about the OpenVINO implementation please refer to PR [#1037](https://github.com/ggerganov/whisper.cpp/pull/1037).
 
 ## NVIDIA GPU support
 
@@ -381,9 +381,9 @@ The [stream](examples/stream) tool samples the audio every half a second and run
 More info is available in [issue #10](https://github.com/ggerganov/whisper.cpp/issues/10).
 
 ```bash
-cmake -B build
+cmake -B build -DWHISPER_SDL2=ON
 cmake --build build --config Release
-./build/bin/stream -m ./models/ggml-base.en.bin -t 8 --step 500 --length 5000
+./build/bin/whisper-stream -m ./models/ggml-base.en.bin -t 8 --step 500 --length 5000
 ```
 
 https://user-images.githubusercontent.com/1991296/194935793-76afede7-cfa8-48d8-a80f-28ba83be7d09.mp4
