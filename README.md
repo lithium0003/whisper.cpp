@@ -7,7 +7,7 @@
 [![Conan Center](https://shields.io/conan/v/whisper-cpp)](https://conan.io/center/whisper-cpp)
 [![npm](https://img.shields.io/npm/v/whisper.cpp.svg)](https://www.npmjs.com/package/whisper.cpp/)
 
-Stable: [v1.7.3](https://github.com/ggerganov/whisper.cpp/releases/tag/v1.7.3) / [Roadmap | F.A.Q.](https://github.com/ggerganov/whisper.cpp/discussions/126)
+Stable: [v1.7.4](https://github.com/ggerganov/whisper.cpp/releases/tag/v1.7.4) / [Roadmap | F.A.Q.](https://github.com/ggerganov/whisper.cpp/discussions/126)
 
 High-performance inference of [OpenAI's Whisper](https://github.com/openai/whisper) automatic speech recognition (ASR) model:
 
@@ -359,6 +359,38 @@ Run the inference examples as usual, for example:
 
 - If you have trouble with Ascend NPU device, please create a issue with **[CANN]** prefix/tag.
 - If you run successfully with your Ascend NPU device, please help update the table `Verified devices`.
+
+## Docker
+
+### Prerequisites
+
+- Docker must be installed and running on your system.
+- Create a folder to store big models & intermediate files (ex. /whisper/models)
+
+### Images
+
+We have two Docker images available for this project:
+
+1. `ghcr.io/ggerganov/whisper.cpp:main`: This image includes the main executable file as well as `curl` and `ffmpeg`. (platforms: `linux/amd64`, `linux/arm64`)
+2. `ghcr.io/ggerganov/whisper.cpp:main-cuda`: Same as `main` but compiled with CUDA support. (platforms: `linux/amd64`)
+
+### Usage
+
+```shell
+# download model and persist it in a local folder
+docker run -it --rm \
+  -v path/to/models:/models \
+  whisper.cpp:main "./models/download-ggml-model.sh base /models"
+# transcribe an audio file
+docker run -it --rm \
+  -v path/to/models:/models \
+  -v path/to/audios:/audios \
+  whisper.cpp:main "./main -m /models/ggml-base.bin -f /audios/jfk.wav"
+# transcribe an audio file in samples folder
+docker run -it --rm \
+  -v path/to/models:/models \
+  whisper.cpp:main "./main -m /models/ggml-base.bin -f ./samples/jfk.wav"
+```
 
 ## Installing with Conan
 
