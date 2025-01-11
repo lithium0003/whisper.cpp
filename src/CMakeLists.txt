@@ -53,7 +53,7 @@ if (WHISPER_COREML)
     target_link_libraries(${TARGET} PRIVATE ${FOUNDATION_FRAMEWORK} ${COREML_FRAMEWORK})
 
     set_target_properties(${TARGET} PROPERTIES
-        COMPILE_FLAGS "-fobjc-arc"
+        COMPILE_FLAGS "-fobjc-arc -mf16c"
         XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
         )
     set_target_properties(${TARGET} PROPERTIES FOLDER "libs")
